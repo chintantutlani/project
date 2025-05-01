@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm"
 
 	"project/models"
-	redisdb "project/redis"
 	user "project/users"
 )
 
@@ -235,7 +234,21 @@ var (
 
 //		c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
 //	}
-func initDB() {
+
+func initRedis() *redis.Client {
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	_, err := rdb.Ping(rctx).Result()
+	if err != nil {
+		log.Fatal("failed to connect to redis: ", err)
+	}
+	return rdb
+}
+
+func initDB() *gorm.DB {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Error loading .env file")
@@ -248,17 +261,33 @@ func initDB() {
 
 	url := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, pass, hostname, dbname)
 
+	// db, err = gorm.Open(mysql.Open(url), &gorm.Config{})
+	// if err != nil {
+	// 	log.Fatal("failed to connect to database: ", err)
+	// }
+	// var err error // <-- Don't shadow
+	// var err error
 	db, err = gorm.Open(mysql.Open(url), &gorm.Config{})
 	if err != nil {
 		log.Fatal("failed to connect to database: ", err)
 	}
+	return db
 }
 
 func main() {
 	initDB()
-	db.AutoMigrate(&models.User{})
 
-	redisdb.InitRedis()
+	db = initDB()
+	db.AutoMigrate(&models.User{})
+	// db.AutoMigrate(&models.User{})
+
+	rdb = initRedis()
+
+	initRedis()
+
+	user.Init(db, rdb)
+
+	// user.Init()
 
 	r := gin.Default()
 

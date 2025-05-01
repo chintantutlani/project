@@ -4,7 +4,6 @@ go 1.24.1
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/joho/godotenv v1.5.1
 	github.com/xuri/excelize/v2 v2.9.0
