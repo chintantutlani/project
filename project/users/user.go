@@ -26,93 +26,93 @@ func Init(database *gorm.DB, redisClient *redis.Client) {
 	rdb = redisClient
 }
 
-func getUsers(c *gin.Context) {
-	data, err := rdb.Get(c, "users").Result()
+func getusers(ctx *gin.Context) {
+	data, err := rdb.Get(ctx, "users").Result()
 	if err == nil {
 		var users []models.User
 		json.Unmarshal([]byte(data), &users)
-		c.JSON(http.StatusOK, users)
+		ctx.JSON(http.StatusOK, users)
 		return
 	}
 
 	var users []models.User
 	db.Find(&users)
-	rdb.Set(c, "users", users, 5*time.Minute)
+	rdb.Set(ctx, "users", users, 5*time.Minute)
 
-	c.JSON(http.StatusOK, users)
+	ctx.JSON(http.StatusOK, users)
 }
 
-func updateUser(c *gin.Context) {
-	id := c.Param("id")
+func updateuser(ctx *gin.Context) {
+	id := ctx.Param("id")
 
-	var existingUser models.User
-	if err := db.First(&existingUser, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+	var existinguser models.User
+	if err := db.First(&existinguser, id).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 
 	var input map[string]interface{}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+	if err := ctx.ShouldBindJSON(&input); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid input", "message": err.Error()})
 		return
 	}
 
-	if err := db.Model(&existingUser).Updates(input).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user", "details": err.Error()})
+	if err := db.Model(&existinguser).Updates(input).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user", "message": err.Error()})
 		return
 	}
 
 	var users []models.User
 	if err := db.Find(&users).Error; err == nil {
 		if data, err := json.Marshal(users); err == nil {
-			_ = rdb.Set(c, "users", data, 5*time.Minute).Err()
+			_ = rdb.Set(ctx, "users", data, 5*time.Minute).Err()
 		}
 	}
 
-	c.JSON(http.StatusOK, existingUser)
+	ctx.JSON(http.StatusOK, existinguser)
 }
 
-func deleteUser(c *gin.Context) {
-	id := c.Param("id")
+func deleteuser(ctx *gin.Context) {
+	id := ctx.Param("id")
 	if err := db.Delete(&models.User{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "user not deleted"})
 		return
 	}
 
 	var users []models.User
 	db.Find(&users)
 	data, _ := json.Marshal(users)
-	rdb.Set(c, "users", data, 5*time.Minute)
+	rdb.Set(ctx, "users", data, 5*time.Minute)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "user deleted"})
 }
 
-func UploadExcel(c *gin.Context) {
-	file, err := c.FormFile("file")
+func uploadexcel(ctx *gin.Context) {
+	file, err := ctx.FormFile("file")
 	if err != nil {
 		log.Println("file upload error:", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "File required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "no file"})
 		return
 	}
 
 	src, err := file.Open()
 	if err != nil {
-		log.Println("error opening uploaded file:", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to open file"})
+		log.Println("error opening file:", err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "file not opened"})
 		return
 	}
 	defer src.Close()
 
 	xlFile, err := excelize.OpenReader(src)
 	if err != nil {
-		log.Println("Excel parse error:", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Excel format"})
+		log.Println("excel not parsed:", err)
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid excel type"})
 		return
 	}
 
 	rows, err := xlFile.GetRows("uk-500")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read Excel rows"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read excel rows"})
 		return
 	}
 
@@ -174,27 +174,27 @@ func UploadExcel(c *gin.Context) {
 
 	if len(users) == 0 {
 		log.Println("no valid user data found")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No valid data to insert"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "no valid data to insert"})
 		return
 	}
 
 	if err := db.AutoMigrate(&models.User{}); err != nil {
 		log.Println("AutoMigrate error:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare database table"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare database table"})
 		return
 	}
 
 	batchSize := 100
 	if err := db.CreateInBatches(users, batchSize).Error; err != nil {
 		log.Println("DB insert error:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save to DB"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save to DB"})
 		return
 	}
 
 	jsonData, _ := json.Marshal(users)
-	rdb.Set(c, "users", jsonData, 5*time.Minute)
+	rdb.Set(ctx, "users", jsonData, 5*time.Minute)
 
-	c.JSON(http.StatusOK, gin.H{
+	ctx.JSON(http.StatusOK, gin.H{
 		"message": "Data imported successfully",
 		"count":   len(users),
 	})
@@ -204,9 +204,9 @@ func RegisteredUserRoute(rg *gin.RouterGroup) {
 
 	userroute := rg.Group("/user")
 
-	userroute.GET("/get", getUsers)
-	userroute.PUT("/update/:id", updateUser)
-	userroute.DELETE("/delete/:id", deleteUser)
-	userroute.POST("/upload", UploadExcel)
+	userroute.GET("/get", getusers)
+	userroute.PUT("/update/:id", updateuser)
+	userroute.DELETE("/delete/:id", deleteuser)
+	userroute.POST("/upload", uploadexcel)
 
 }
