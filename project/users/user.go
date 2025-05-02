@@ -131,7 +131,6 @@ func UploadExcel(c *gin.Context) {
 	results := make(chan result, len(rows))
 	var wg sync.WaitGroup
 
-	// Worker goroutines
 	for w := 0; w < workerCount; w++ {
 		wg.Add(1)
 		go func() {
@@ -158,7 +157,6 @@ func UploadExcel(c *gin.Context) {
 		}()
 	}
 
-	// Skip header and send jobs
 	for i, row := range rows {
 		if i == 0 {
 			continue
@@ -167,7 +165,6 @@ func UploadExcel(c *gin.Context) {
 	}
 	close(jobs)
 
-	// Wait for workers to finish
 	go func() {
 		wg.Wait()
 		close(results)
@@ -193,7 +190,6 @@ func UploadExcel(c *gin.Context) {
 		return
 	}
 
-	// Cache in Redis
 	jsonData, _ := json.Marshal(users)
 	rdb.Set(c, "users", jsonData, 5*time.Minute)
 
