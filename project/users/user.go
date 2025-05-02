@@ -44,37 +44,32 @@ func getUsers(c *gin.Context) {
 
 func updateUser(c *gin.Context) {
 	id := c.Param("id")
-	var user models.User
-	if err := db.First(&user, id).Error; err != nil {
+
+	var existingUser models.User
+	if err := db.First(&existingUser, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
-	var input models.User
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+	var input map[string]interface{}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
 	}
 
-	user.Address = input.Address
-	user.City = input.City
-	user.CompanyName = input.CompanyName
-	user.County = input.County
-	user.Email = input.Email
-	user.FirstName = input.FirstName
-	user.LastName = input.LastName
-
-	user.Phone = input.Phone
-	user.Postal = input.Postal
-	user.Web = input.Web
-	db.Save(&user)
+	if err := db.Model(&existingUser).Updates(input).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user", "details": err.Error()})
+		return
+	}
 
 	var users []models.User
-	db.Find(&users)
-	data, _ := json.Marshal(users)
-	rdb.Set(c, "users", data, 5*time.Minute)
+	if err := db.Find(&users).Error; err == nil {
+		if data, err := json.Marshal(users); err == nil {
+			_ = rdb.Set(c, "users", data, 5*time.Minute).Err()
+		}
+	}
 
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, existingUser)
 }
 
 func deleteUser(c *gin.Context) {
@@ -183,6 +178,12 @@ func UploadExcel(c *gin.Context) {
 		return
 	}
 
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		log.Println("AutoMigrate error:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to prepare database table"})
+		return
+	}
+
 	batchSize := 100
 	if err := db.CreateInBatches(users, batchSize).Error; err != nil {
 		log.Println("DB insert error:", err)
@@ -204,7 +205,7 @@ func RegisteredUserRoute(rg *gin.RouterGroup) {
 	userroute := rg.Group("/user")
 
 	userroute.GET("/get", getUsers)
-	userroute.PUT("/uodate/:id", updateUser)
+	userroute.PUT("/update/:id", updateUser)
 	userroute.DELETE("/delete/:id", deleteUser)
 	userroute.POST("/upload", UploadExcel)
 
